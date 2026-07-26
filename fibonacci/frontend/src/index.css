@@ -1,0 +1,14 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-accent-yellow: #ecad0a;
+  --color-blue-primary: #209dd7;
+  --color-purple-secondary: #753991;
+  --color-dark-navy: #032147;
+  --color-gray-text: #888888;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-dark-navy);
+}

@@ -1,0 +1,14 @@
+# Build artifacts
+bin/
+obj/
+
+# Test artifacts
+[Tt]est[Rr]esult*/
+
+# OS
+.DS_Store
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea
