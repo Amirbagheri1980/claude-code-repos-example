@@ -63,6 +63,7 @@ public class ChatService : IChatService
         }
 
         var revealed = meta.TryGetValue("Revealed", out var revealedValue) && revealedValue.BOOL == true;
+        var roundId = meta.TryGetValue("RoundId", out var roundIdValue) ? int.Parse(roundIdValue.N) : 0;
 
         var participants = items
             .Where(item => item["SortKey"].S.StartsWith(ParticipantSortKeyPrefix))
@@ -83,7 +84,7 @@ public class ChatService : IChatService
             })
             .ToList();
 
-        return new ChatStateResponse(revealed, participants);
+        return new ChatStateResponse(revealed, roundId, participants);
     }
 
     public async Task<bool> SetSelectionAsync(
@@ -170,6 +171,76 @@ public class ChatService : IChatService
             },
             ct
         );
+
+        return true;
+    }
+
+    public async Task<bool> RestartAsync(string chatId, CancellationToken ct = default)
+    {
+        var items = await QueryChatItemsAsync(chatId, ct);
+
+        var meta = items.FirstOrDefault(item => item["SortKey"].S == MetaSortKey);
+        if (meta is null)
+        {
+            return false;
+        }
+
+        var currentRoundId = meta.TryGetValue("RoundId", out var roundIdValue) ? int.Parse(roundIdValue.N) : 0;
+
+        var metaKey = new Dictionary<string, AttributeValue>
+        {
+            ["ChatId"] = new(chatId),
+            ["SortKey"] = new(MetaSortKey),
+        };
+
+        await _dynamoDb.UpdateItemAsync(
+            new UpdateItemRequest
+            {
+                TableName = _tableName,
+                Key = metaKey,
+                UpdateExpression = "SET Revealed = :revealed",
+                ExpressionAttributeValues = new Dictionary<string, AttributeValue>
+                {
+                    [":revealed"] = new() { BOOL = false },
+                },
+            },
+            ct
+        );
+
+        await _dynamoDb.UpdateItemAsync(
+            new UpdateItemRequest
+            {
+                TableName = _tableName,
+                Key = metaKey,
+                UpdateExpression = "SET RoundId = :roundId",
+                ExpressionAttributeValues = new Dictionary<string, AttributeValue>
+                {
+                    [":roundId"] = new() { N = (currentRoundId + 1).ToString() },
+                },
+            },
+            ct
+        );
+
+        var participantsWithSelection = items.Where(item =>
+            item["SortKey"].S.StartsWith(ParticipantSortKeyPrefix) && item.ContainsKey("Selection")
+        );
+
+        foreach (var participant in participantsWithSelection)
+        {
+            await _dynamoDb.UpdateItemAsync(
+                new UpdateItemRequest
+                {
+                    TableName = _tableName,
+                    Key = new Dictionary<string, AttributeValue>
+                    {
+                        ["ChatId"] = participant["ChatId"],
+                        ["SortKey"] = participant["SortKey"],
+                    },
+                    UpdateExpression = "REMOVE Selection",
+                },
+                ct
+            );
+        }
 
         return true;
     }
@@ -264,6 +335,7 @@ public class ChatService : IChatService
                     ["ChatId"] = new(chatId),
                     ["SortKey"] = new(MetaSortKey),
                     ["Revealed"] = new() { BOOL = false },
+                    ["RoundId"] = new() { N = "0" },
                     ["CreatedAt"] = new(DateTimeOffset.UtcNow.ToString("O")),
                 },
             },

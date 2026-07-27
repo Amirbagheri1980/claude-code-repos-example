@@ -1,4 +1,9 @@
 import { test, expect } from '@playwright/test'
+import { resetActiveChat } from './reset-chat'
+
+test.beforeEach(async ({ request }) => {
+  await resetActiveChat(request)
+})
 
 test('facilitator reveals a user pick and closing the chat returns the user to the landing page', async ({
   browser,
@@ -19,6 +24,7 @@ test('facilitator reveals a user pick and closing the chat returns the user to t
     ).toBeVisible()
 
     await userPage.goto('/')
+    await userPage.getByRole('radio', { name: 'User' }).check()
     await userPage.getByLabel(/your name/i).fill('Ada Lovelace')
     await userPage.getByRole('button', { name: /enter/i }).click()
     await expect(
@@ -37,6 +43,14 @@ test('facilitator reveals a user pick and closing the chat returns the user to t
     await expect(facilitatorPage.getByText('5', { exact: true })).toBeVisible({
       timeout: 10_000,
     })
+
+    await facilitatorPage.getByRole('button', { name: /restart/i }).click()
+    await expect(
+      facilitatorPage.getByRole('listitem').filter({ hasText: 'Ada Lovelace' }),
+    ).toContainText('Waiting…', { timeout: 10_000 })
+    await expect(
+      userPage.getByRole('button', { name: '5', exact: true }),
+    ).toHaveAttribute('aria-pressed', 'false', { timeout: 10_000 })
 
     await facilitatorPage.getByRole('button', { name: /close chat/i }).click()
     await expect(

@@ -52,7 +52,11 @@ function MainPage({ session, onLeave }: MainPageProps) {
         {session.role === 'Facilitator' ? (
           <FacilitatorPanel chatId={chatId} chatState={chatState} onClose={onLeave} />
         ) : (
-          <EstimateDeck chatId={chatId} participantId={participantId} />
+          <EstimateDeck
+            key={chatState?.roundId ?? 0}
+            chatId={chatId}
+            participantId={participantId}
+          />
         )}
       </div>
     </motion.div>

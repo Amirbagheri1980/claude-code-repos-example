@@ -103,6 +103,49 @@ public class ChatServiceTests
     }
 
     [Fact]
+    public async Task Restart_ClearsSelectionsAndReveal_ButKeepsParticipants()
+    {
+        var service = CreateService();
+        var user = await service.JoinAsync("Ada", ParticipantRole.User);
+        var facilitator = await service.JoinAsync("Grace", ParticipantRole.Facilitator);
+        await service.SetSelectionAsync(user.ChatId, user.ParticipantId, "8");
+        await service.RevealAsync(user.ChatId);
+
+        var restarted = await service.RestartAsync(user.ChatId);
+
+        Assert.True(restarted);
+        var state = await service.GetStateAsync(user.ChatId, user.ParticipantId);
+        Assert.NotNull(state);
+        Assert.False(state!.Revealed);
+        Assert.Equal(2, state.Participants.Count);
+        Assert.All(state.Participants, p => Assert.False(p.HasSelected));
+        Assert.All(state.Participants, p => Assert.Null(p.Selection));
+    }
+
+    [Fact]
+    public async Task Restart_IncrementsRoundId()
+    {
+        var service = CreateService();
+        var user = await service.JoinAsync("Ada", ParticipantRole.User);
+        var before = await service.GetStateAsync(user.ChatId, user.ParticipantId);
+
+        await service.RestartAsync(user.ChatId);
+
+        var after = await service.GetStateAsync(user.ChatId, user.ParticipantId);
+        Assert.Equal(before!.RoundId + 1, after!.RoundId);
+    }
+
+    [Fact]
+    public async Task Restart_UnknownChat_ReturnsFalse()
+    {
+        var service = CreateService();
+
+        var restarted = await service.RestartAsync("missing-chat");
+
+        Assert.False(restarted);
+    }
+
+    [Fact]
     public async Task Close_DeletesAllChatData_AndNextJoinStartsAFreshChat()
     {
         var service = CreateService();

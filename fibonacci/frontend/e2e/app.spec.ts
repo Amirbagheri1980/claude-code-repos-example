@@ -1,4 +1,9 @@
 import { test, expect } from '@playwright/test'
+import { resetActiveChat } from './reset-chat'
+
+test.beforeEach(async ({ request }) => {
+  await resetActiveChat(request)
+})
 
 test('full estimation flow: join, view sidebar, select and switch cards', async ({
   page,
@@ -12,6 +17,7 @@ test('full estimation flow: join, view sidebar, select and switch cards', async 
   const enterButton = page.getByRole('button', { name: /enter/i })
   await expect(enterButton).toBeDisabled()
 
+  await page.getByRole('radio', { name: 'User' }).check()
   await page.getByLabel(/your name/i).fill('Ada Lovelace')
   await expect(enterButton).toBeEnabled()
   await page.getByLabel(/your name/i).press('Enter')

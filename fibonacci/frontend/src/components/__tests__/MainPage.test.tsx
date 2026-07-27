@@ -8,6 +8,7 @@ vi.mock('../../api', () => ({
   getChatState: vi.fn(),
   setSelection: vi.fn().mockResolvedValue(undefined),
   revealChat: vi.fn().mockResolvedValue(undefined),
+  restartChat: vi.fn().mockResolvedValue(undefined),
   closeChat: vi.fn().mockResolvedValue(undefined),
 }))
 

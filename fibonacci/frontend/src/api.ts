@@ -16,6 +16,7 @@ export interface ParticipantDto {
 
 export interface ChatStateResponse {
   revealed: boolean
+  roundId?: number
   participants: ParticipantDto[]
 }
 
@@ -71,6 +72,10 @@ export function setSelection(
 
 export function revealChat(chatId: string): Promise<void> {
   return request<void>(`/api/chats/${chatId}/reveal`, { method: 'POST' })
+}
+
+export function restartChat(chatId: string): Promise<void> {
+  return request<void>(`/api/chats/${chatId}/restart`, { method: 'POST' })
 }
 
 export function closeChat(chatId: string): Promise<void> {

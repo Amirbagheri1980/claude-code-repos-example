@@ -1,4 +1,4 @@
-import { revealChat, closeChat, type ChatStateResponse } from '../api'
+import { revealChat, restartChat, closeChat, type ChatStateResponse } from '../api'
 
 interface FacilitatorPanelProps {
   chatId: string
@@ -12,6 +12,10 @@ function FacilitatorPanel({ chatId, chatState, onClose }: FacilitatorPanelProps)
 
   function handleReveal() {
     void revealChat(chatId)
+  }
+
+  function handleRestart() {
+    void restartChat(chatId)
   }
 
   async function handleClose() {
@@ -31,6 +35,13 @@ function FacilitatorPanel({ chatId, chatState, onClose }: FacilitatorPanelProps)
             className="rounded-lg bg-blue-primary px-4 py-2 text-sm font-semibold text-white transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
           >
             Reveal
+          </button>
+          <button
+            type="button"
+            onClick={handleRestart}
+            className="rounded-lg border border-blue-primary px-4 py-2 text-sm font-semibold text-blue-primary"
+          >
+            Restart
           </button>
           <button
             type="button"

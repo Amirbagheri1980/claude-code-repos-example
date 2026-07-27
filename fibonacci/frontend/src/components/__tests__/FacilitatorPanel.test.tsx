@@ -2,10 +2,11 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import FacilitatorPanel from '../FacilitatorPanel'
-import { revealChat, closeChat, type ChatStateResponse } from '../../api'
+import { revealChat, restartChat, closeChat, type ChatStateResponse } from '../../api'
 
 vi.mock('../../api', () => ({
   revealChat: vi.fn().mockResolvedValue(undefined),
+  restartChat: vi.fn().mockResolvedValue(undefined),
   closeChat: vi.fn().mockResolvedValue(undefined),
 }))
 
@@ -74,6 +75,15 @@ describe('FacilitatorPanel', () => {
       />,
     )
     expect(screen.getByText('5')).toBeInTheDocument()
+  })
+
+  it('calls restartChat when Restart is clicked', async () => {
+    const user = userEvent.setup()
+    render(<FacilitatorPanel chatId={CHAT_ID} chatState={chatState} onClose={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: /restart/i }))
+
+    expect(restartChat).toHaveBeenCalledWith(CHAT_ID)
   })
 
   it('calls closeChat and onClose when Close Chat is clicked', async () => {

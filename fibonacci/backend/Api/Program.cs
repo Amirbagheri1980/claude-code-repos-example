@@ -81,6 +81,15 @@ chats.MapPost(
 );
 
 chats.MapPost(
+    "/{chatId}/restart",
+    async (string chatId, IChatService chatService, CancellationToken ct) =>
+    {
+        var ok = await chatService.RestartAsync(chatId, ct);
+        return ok ? Results.NoContent() : Results.NotFound();
+    }
+);
+
+chats.MapPost(
     "/{chatId}/close",
     async (string chatId, IChatService chatService, CancellationToken ct) =>
     {

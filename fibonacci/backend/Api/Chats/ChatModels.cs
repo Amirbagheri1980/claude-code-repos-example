@@ -23,4 +23,4 @@ public record ParticipantDto(
     string? Selection
 );
 
-public record ChatStateResponse(bool Revealed, IReadOnlyList<ParticipantDto> Participants);
+public record ChatStateResponse(bool Revealed, int RoundId, IReadOnlyList<ParticipantDto> Participants);

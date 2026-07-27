@@ -2,7 +2,10 @@ import { defineConfig } from '@playwright/test'
 
 export default defineConfig({
   testDir: './e2e',
-  fullyParallel: true,
+  // The backend has a single global active chat (no rooms/join-codes), so
+  // specs can't safely run concurrently against it.
+  fullyParallel: false,
+  workers: 1,
   webServer: [
     {
       command: 'dotnet run --project ../backend/Api',

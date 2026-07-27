@@ -19,5 +19,7 @@ public interface IChatService
 
     Task<bool> RevealAsync(string chatId, CancellationToken ct = default);
 
+    Task<bool> RestartAsync(string chatId, CancellationToken ct = default);
+
     Task<bool> CloseAsync(string chatId, CancellationToken ct = default);
 }
