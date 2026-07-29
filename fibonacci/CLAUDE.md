@@ -65,6 +65,32 @@ Backend, run from `backend/`:
 - Frontend unit tests (Vitest + React Testing Library) are colocated in `src/components/__tests__/`. Frontend e2e tests (Playwright) live in `frontend/e2e/`. Backend unit tests (xUnit) live in `backend/Api.Tests/`.
 - The backend has only one global active chat (no per-test isolation), so e2e specs run serially — `playwright.config.ts` sets `fullyParallel: false` and `workers: 1` — and each spec resets the active chat in a `beforeEach` via `e2e/reset-chat.ts` (joins then closes via direct API calls, bypassing the UI). Running specs in parallel, or skipping the reset, causes cross-test participant pollution.
 
+## Deployment
+
+Decided and deployed 2026-07-29. Local dev (`dotnet run` + `npm run dev`) still works unchanged and is the default workflow for iterating; the deployment below is a separately-updated environment, not the dev loop.
+
+- Live backend: `https://bqdsbd3dc2.ap-southeast-2.awsapprunner.com`
+- Live frontend: `https://main.d2t14e70i84h2u.amplifyapp.com`
+- Redeploy with `./scripts/deploy.sh` (needs Docker running locally and `AWS_PROFILE=dynamodb-backend` credentials — run `aws login --profile agent-toolkit` first if that profile has expired).
+
+- Backend: **AWS App Runner**, deployed as-is from the existing .NET minimal API container (no Lambda adapter, no code changes). Smallest supported size (0.25 vCPU / 0.5 GB) — plenty for a small team's intermittent estimation sessions.
+- Frontend: **AWS Amplify Hosting** serving the Vite production build, automatic HTTPS via ACM.
+- Same account/region as the existing DynamoDB table — account `806880856266`, `ap-southeast-2` — to avoid cross-account IAM and keep latency low.
+- IAM: a single auto-generated App Runner instance role scoped to the `FibonacciChats` table (read/write only, verified via `cdk synth`). No manually managed IAM users or groups — this was an explicit requirement.
+- Cost: roughly $3-5/month, almost entirely App Runner's idle provisioned-instance floor (~$0.007-0.009/GB-hour, always keeps 1 instance warm — App Runner does not scale to zero automatically). Amplify Hosting and DynamoDB are negligible at this scale/free tier. Pause the App Runner service manually (console/CLI/API) between periods of no use to cut the idle cost further.
+- Rejected alternative: API Gateway + Lambda. Would likely cost closer to $0/month (Lambda's free tier is 1M requests + 400,000 GB-seconds every month, permanently), but requires adding `Amazon.Lambda.AspNetCoreServer.Hosting` to adapt Kestrel to Lambda's event model and accepts occasional .NET cold starts. App Runner was chosen for zero code changes over the small extra cost.
+
+### Infra layout
+
+- `infra/` is a standalone CDK v2 TypeScript app (own `package.json`, not part of the frontend/backend workspaces). `infra/bin/infra.ts` defines two stacks in account `806880856266` / `ap-southeast-2`: `FibonacciBackend` and `FibonacciFrontend`.
+- `FibonacciBackend` (`infra/lib/backend-stack.ts`): references the existing `FibonacciChats` table with `dynamodb.Table.fromTableName` (CDK does not manage the table itself), builds `backend/Api/Dockerfile` into an ECR image asset, and runs it on App Runner via `@aws-cdk/aws-apprunner-alpha`. Takes an optional `corsAllowedOrigin` prop (from `CORS_ALLOWED_ORIGIN` env var), defaulting to the local dev origin.
+- `FibonacciFrontend` (`infra/lib/frontend-stack.ts`): creates an Amplify Hosting `App` with **no `sourceCodeProvider`** — this repo has no git remote, so there is no CI/CD branch connection. Instead it uploads `frontend/dist` as an S3 asset and deploys it via Amplify's `addBranch({ asset })`, which CDK wires through a custom resource calling `startDeployment`. This means `frontend/dist` must already exist (from `npm run build`) before `cdk deploy` / `cdk synth` runs, or the stack throws.
+- `backend/Api/Dockerfile`: multi-stage .NET 8 SDK build → `aspnet:8.0` runtime image, listens on port 8080 (the .NET 8+ container default and what App Runner's `imageConfiguration.port` is set to).
+- Backend CORS (`Program.cs`, already existed) reads `Cors:AllowedOrigin` from config — i.e. the `Cors__AllowedOrigin` env var App Runner sets — no code change was needed there.
+- Circular dependency between the two stacks (backend needs the frontend's Amplify domain for CORS; the frontend build needs the backend's App Runner URL baked in via `VITE_API_BASE_URL`) is resolved by `scripts/deploy.sh`, which deploys in three passes: backend (placeholder CORS) → build+deploy frontend against the real backend URL → redeploy backend with CORS locked to the real Amplify domain.
+- `cdk synth` for both stacks succeeds without Docker (Docker is only invoked at `cdk deploy`/asset-publish time).
+- **Apple Silicon gotcha**: `DockerImageAsset` in `backend-stack.ts` sets `platform: ecrAssets.Platform.LINUX_AMD64` explicitly. Without it, Docker Desktop on an ARM Mac builds an arm64 image by default, which App Runner (x86_64 only) fails to run — the App Runner service creation fails with `CREATE_FAILED` / `NotStabilized`, and the App Runner application log shows `exec /usr/bin/dotnet: exec format error`. Don't remove that `platform` line.
+
 ## Strategy
 
 1. Write plan with success criteria for each phase to be checked off. Include project scaffolding, including .gitignore, and rigorous unit testing.
