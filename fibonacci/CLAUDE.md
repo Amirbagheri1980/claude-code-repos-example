@@ -70,8 +70,9 @@ Backend, run from `backend/`:
 Decided and deployed 2026-07-29. Local dev (`dotnet run` + `npm run dev`) still works unchanged and is the default workflow for iterating; the deployment below is a separately-updated environment, not the dev loop.
 
 - Live backend: `https://bqdsbd3dc2.ap-southeast-2.awsapprunner.com`
-- Live frontend: `https://main.d2t14e70i84h2u.amplifyapp.com`
+- Live frontend: `https://fibonacci.aeyeit.com.au` (custom domain; the Amplify default `https://main.d2t14e70i84h2u.amplifyapp.com` still works too)
 - Redeploy with `./scripts/deploy.sh` (needs Docker running locally and `AWS_PROFILE=dynamodb-backend` credentials — run `aws login --profile agent-toolkit` first if that profile has expired).
+- Custom domain: `infra/lib/frontend-stack.ts` associates `fibonacci.aeyeit.com.au` via `app.addDomain(...)` (Amplify-managed ACM cert). DNS for `aeyeit.com.au` is authoritative at **Cloudflare** (nameservers `donovan.ns.cloudflare.com` / `hazel.ns.cloudflare.com`) even though the domain is registered at CrazyDomains — don't assume CrazyDomains' own DNS Zone Editor controls anything for this domain. Two CNAME records live in Cloudflare, both set to **DNS only** (not proxied, since Amplify terminates its own TLS via CloudFront): one for ACM certificate validation, one mapping `fibonacci` → the Amplify/CloudFront target. Record values are regenerated if the `Domain` construct is ever replaced; fetch current values with `aws amplify get-domain-association --app-id d2t14e70i84h2u --domain-name aeyeit.com.au --region ap-southeast-2 --profile dynamodb-backend`.
 
 - Backend: **AWS App Runner**, deployed as-is from the existing .NET minimal API container (no Lambda adapter, no code changes). Smallest supported size (0.25 vCPU / 0.5 GB) — plenty for a small team's intermittent estimation sessions.
 - Frontend: **AWS Amplify Hosting** serving the Vite production build, automatic HTTPS via ACM.
