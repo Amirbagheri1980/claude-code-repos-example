@@ -14,9 +14,10 @@ builder.Services.AddSingleton<IChatService>(sp => new ChatService(
     builder.Configuration["Aws:TableName"] ?? "FibonacciChats"
 ));
 
-var corsOrigin = builder.Configuration["Cors:AllowedOrigin"] ?? "http://localhost:5173";
+var corsOrigins = (builder.Configuration["Cors:AllowedOrigin"] ?? "http://localhost:5173")
+    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 builder.Services.AddCors(options =>
-    options.AddDefaultPolicy(policy => policy.WithOrigins(corsOrigin).AllowAnyHeader().AllowAnyMethod())
+    options.AddDefaultPolicy(policy => policy.WithOrigins(corsOrigins).AllowAnyHeader().AllowAnyMethod())
 );
 
 var app = builder.Build();
