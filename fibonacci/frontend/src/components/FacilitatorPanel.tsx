@@ -1,13 +1,14 @@
 import { useState } from 'react'
-import { revealChat, restartChat, closeChat, type ChatStateResponse } from '../api'
+import { revealChat, restartChat, closeChat, removeParticipant, type ChatStateResponse } from '../api'
 
 interface FacilitatorPanelProps {
   chatId: string
+  participantId: string
   chatState: ChatStateResponse | null
   onClose: () => void
 }
 
-function FacilitatorPanel({ chatId, chatState, onClose }: FacilitatorPanelProps) {
+function FacilitatorPanel({ chatId, participantId, chatState, onClose }: FacilitatorPanelProps) {
   const [copied, setCopied] = useState(false)
   const participants = chatState?.participants ?? []
   const revealed = chatState?.revealed ?? false
@@ -30,6 +31,10 @@ function FacilitatorPanel({ chatId, chatState, onClose }: FacilitatorPanelProps)
   async function handleClose() {
     await closeChat(chatId)
     onClose()
+  }
+
+  function handleRemove(targetParticipantId: string) {
+    void removeParticipant(chatId, targetParticipantId)
   }
 
   return (
@@ -90,20 +95,32 @@ function FacilitatorPanel({ chatId, chatState, onClose }: FacilitatorPanelProps)
           {participants.map((participant) => (
             <li
               key={participant.participantId}
-              className="flex items-center justify-between rounded-lg border border-blue-primary/20 px-4 py-3"
+              className="flex items-center justify-between gap-3 rounded-lg border border-blue-primary/20 px-4 py-3"
             >
               <span className="font-medium text-dark-navy">{participant.name}</span>
-              <span
-                className={`text-sm font-semibold ${
-                  participant.hasSelected ? 'text-purple-secondary' : 'text-gray-text'
-                }`}
-              >
-                {revealed
-                  ? (participant.selection ?? '—')
-                  : participant.hasSelected
-                    ? 'Picked'
-                    : 'Waiting…'}
-              </span>
+              <div className="flex items-center gap-3">
+                <span
+                  className={`text-sm font-semibold ${
+                    participant.hasSelected ? 'text-purple-secondary' : 'text-gray-text'
+                  }`}
+                >
+                  {revealed
+                    ? (participant.selection ?? '—')
+                    : participant.hasSelected
+                      ? 'Picked'
+                      : 'Waiting…'}
+                </span>
+                {participant.participantId !== participantId && (
+                  <button
+                    type="button"
+                    onClick={() => handleRemove(participant.participantId)}
+                    aria-label={`Remove ${participant.name}`}
+                    className="text-sm font-semibold text-purple-secondary hover:underline"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
             </li>
           ))}
         </ul>

@@ -67,4 +67,21 @@ describe('LandingPage', () => {
 
     expect(onSubmit).toHaveBeenCalledWith('Grace', 'User')
   })
+
+  it('hides the role radios when allowRoleSelection is false', () => {
+    render(<LandingPage onSubmit={vi.fn()} allowRoleSelection={false} />)
+    expect(screen.queryByRole('radio', { name: 'Facilitator' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: 'User' })).not.toBeInTheDocument()
+  })
+
+  it('submits the User role when allowRoleSelection is false, without showing radios', async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn()
+    render(<LandingPage onSubmit={onSubmit} allowRoleSelection={false} />)
+
+    await user.type(screen.getByLabelText(/your name/i), 'Ada Lovelace')
+    await user.click(screen.getByRole('button', { name: /enter/i }))
+
+    expect(onSubmit).toHaveBeenCalledWith('Ada Lovelace', 'User')
+  })
 })

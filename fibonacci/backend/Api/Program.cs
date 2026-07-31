@@ -45,7 +45,7 @@ chats.MapPost(
 
 chats.MapPost(
     "/{chatId}/join",
-    async (string chatId, JoinRequest request, IChatService chatService, CancellationToken ct) =>
+    async (string chatId, JoinRoomRequest request, IChatService chatService, CancellationToken ct) =>
     {
         var name = request.Name.Trim();
         if (name.Length == 0)
@@ -53,7 +53,7 @@ chats.MapPost(
             return Results.BadRequest("Name is required.");
         }
 
-        var result = await chatService.JoinRoomAsync(chatId, name, request.Role, ct);
+        var result = await chatService.JoinRoomAsync(chatId, name, ct);
         return result is null ? Results.NotFound() : Results.Ok(result);
     }
 );
@@ -110,6 +110,15 @@ chats.MapPost(
     async (string chatId, IChatService chatService, CancellationToken ct) =>
     {
         var ok = await chatService.CloseAsync(chatId, ct);
+        return ok ? Results.NoContent() : Results.NotFound();
+    }
+);
+
+chats.MapDelete(
+    "/{chatId}/participants/{participantId}",
+    async (string chatId, string participantId, IChatService chatService, CancellationToken ct) =>
+    {
+        var ok = await chatService.RemoveParticipantAsync(chatId, participantId, ct);
         return ok ? Results.NoContent() : Results.NotFound();
     }
 );

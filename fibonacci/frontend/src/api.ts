@@ -43,14 +43,10 @@ export function createRoom(name: string, role: ParticipantRole): Promise<JoinRes
   })
 }
 
-export function joinRoom(
-  chatId: string,
-  name: string,
-  role: ParticipantRole,
-): Promise<JoinResponse> {
+export function joinRoom(chatId: string, name: string): Promise<JoinResponse> {
   return request<JoinResponse>(`/api/chats/${chatId}/join`, {
     method: 'POST',
-    body: JSON.stringify({ name, role }),
+    body: JSON.stringify({ name }),
   })
 }
 
@@ -90,4 +86,10 @@ export function restartChat(chatId: string): Promise<void> {
 
 export function closeChat(chatId: string): Promise<void> {
   return request<void>(`/api/chats/${chatId}/close`, { method: 'POST' })
+}
+
+export function removeParticipant(chatId: string, participantId: string): Promise<void> {
+  return request<void>(`/api/chats/${chatId}/participants/${participantId}`, {
+    method: 'DELETE',
+  })
 }

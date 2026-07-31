@@ -29,6 +29,11 @@ function MainPage({ session, onLeave }: MainPageProps) {
         onLeave()
         return
       }
+      const stillPresent = state.participants.some((p) => p.participantId === participantId)
+      if (!stillPresent) {
+        onLeave()
+        return
+      }
       setChatState(state)
     }
 
@@ -50,7 +55,12 @@ function MainPage({ session, onLeave }: MainPageProps) {
       <div className="mx-auto grid max-w-5xl grid-cols-1 gap-6 md:grid-cols-[220px_1fr]">
         <Sidebar userName={session.name} role={session.role} />
         {session.role === 'Facilitator' ? (
-          <FacilitatorPanel chatId={chatId} chatState={chatState} onClose={onLeave} />
+          <FacilitatorPanel
+            chatId={chatId}
+            participantId={participantId}
+            chatState={chatState}
+            onClose={onLeave}
+          />
         ) : (
           <EstimateDeck
             key={chatState?.roundId ?? 0}

@@ -50,7 +50,6 @@ public class ChatService : IChatService
     public async Task<JoinResponse?> JoinRoomAsync(
         string chatId,
         string name,
-        ParticipantRole role,
         CancellationToken ct = default
     )
     {
@@ -73,7 +72,7 @@ public class ChatService : IChatService
             ? DateTimeOffset.FromUnixTimeSeconds(long.Parse(expiresValue.N))
             : DateTimeOffset.UtcNow.Add(RoomTtl);
 
-        return await AddParticipantAsync(chatId, name, role, expiresAt, ct);
+        return await AddParticipantAsync(chatId, name, ParticipantRole.User, expiresAt, ct);
     }
 
     private async Task<bool> TryCreateRoomMetaAsync(
@@ -368,6 +367,31 @@ public class ChatService : IChatService
             );
         }
 
+        return true;
+    }
+
+    public async Task<bool> RemoveParticipantAsync(
+        string chatId,
+        string participantId,
+        CancellationToken ct = default
+    )
+    {
+        var key = new Dictionary<string, AttributeValue>
+        {
+            ["ChatId"] = new(chatId),
+            ["SortKey"] = new(ParticipantSortKeyPrefix + participantId),
+        };
+
+        var existing = await _dynamoDb.GetItemAsync(
+            new GetItemRequest { TableName = _tableName, Key = key },
+            ct
+        );
+        if (existing.Item is not { Count: > 0 })
+        {
+            return false;
+        }
+
+        await _dynamoDb.DeleteItemAsync(new DeleteItemRequest { TableName = _tableName, Key = key }, ct);
         return true;
     }
 

@@ -59,6 +59,15 @@ public static class InMemoryDynamoDb
             });
 
         client
+            .DeleteItemAsync(Arg.Any<DeleteItemRequest>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                var request = callInfo.Arg<DeleteItemRequest>()!;
+                table.Remove(KeyOf(request.Key));
+                return Task.FromResult(new DeleteItemResponse());
+            });
+
+        client
             .QueryAsync(Arg.Any<QueryRequest>(), Arg.Any<CancellationToken>())
             .Returns(callInfo =>
             {

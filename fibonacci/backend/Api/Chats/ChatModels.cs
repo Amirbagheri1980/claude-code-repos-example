@@ -11,6 +11,8 @@ public enum ParticipantRole
 
 public record JoinRequest(string Name, ParticipantRole Role);
 
+public record JoinRoomRequest(string Name);
+
 public record JoinResponse(string ChatId, string ParticipantId, ParticipantRole Role);
 
 public record SelectionRequest(string? Value);

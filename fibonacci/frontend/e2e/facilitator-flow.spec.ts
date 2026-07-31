@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 
-test('facilitator reveals a user pick and closing the chat returns the user to the landing page', async ({
+test('facilitator reveals a user pick, removes them, and closing the chat returns the facilitator to the landing page', async ({
   browser,
 }) => {
   const facilitatorContext = await browser.newContext()
@@ -23,7 +23,10 @@ test('facilitator reveals a user pick and closing the chat returns the user to t
 
     await userPage.goto(roomLink)
     await expect(userPage.getByLabel(/your name/i)).toBeVisible()
-    await userPage.getByRole('radio', { name: 'User' }).check()
+    // Joining an existing room never offers a Facilitator choice — only the
+    // room's creator can be the facilitator, so no role radios are shown at all.
+    await expect(userPage.getByRole('radio', { name: 'Facilitator' })).not.toBeVisible()
+    await expect(userPage.getByRole('radio', { name: 'User' })).not.toBeVisible()
     await userPage.getByLabel(/your name/i).fill('Ada Lovelace')
     await userPage.getByRole('button', { name: /enter/i }).click()
     await expect(
@@ -51,13 +54,22 @@ test('facilitator reveals a user pick and closing the chat returns the user to t
       userPage.getByRole('button', { name: '5', exact: true }),
     ).toHaveAttribute('aria-pressed', 'false', { timeout: 10_000 })
 
+    // The facilitator's own row has no Remove button; only other participants do.
+    await expect(
+      facilitatorPage.getByRole('button', { name: /remove grace hopper/i }),
+    ).not.toBeVisible()
+    await facilitatorPage.getByRole('button', { name: /remove ada lovelace/i }).click()
+    await expect(
+      facilitatorPage.getByRole('listitem').filter({ hasText: 'Ada Lovelace' }),
+    ).not.toBeVisible({ timeout: 10_000 })
+    await expect(
+      userPage.getByRole('heading', { name: /fibonacci estimation/i }),
+    ).toBeVisible({ timeout: 10_000 })
+
     await facilitatorPage.getByRole('button', { name: /close chat/i }).click()
     await expect(
       facilitatorPage.getByRole('heading', { name: /fibonacci estimation/i }),
     ).toBeVisible()
-    await expect(
-      userPage.getByRole('heading', { name: /fibonacci estimation/i }),
-    ).toBeVisible({ timeout: 10_000 })
   } finally {
     await facilitatorContext.close()
     await userContext.close()

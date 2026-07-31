@@ -64,10 +64,23 @@ public class ChatServiceTests
         var service = CreateService();
         var first = await service.CreateRoomAsync("Ada", ParticipantRole.User);
 
-        var second = await service.JoinRoomAsync(first.ChatId, "Grace", ParticipantRole.Facilitator);
+        var second = await service.JoinRoomAsync(first.ChatId, "Grace");
 
         Assert.NotNull(second);
         Assert.Equal(first.ChatId, second!.ChatId);
+    }
+
+    [Fact]
+    public async Task JoinRoom_AlwaysAssignsUserRole()
+    {
+        // Guards the "no more than one facilitator per room" invariant: the room's
+        // facilitator (if any) is only ever whoever called CreateRoomAsync.
+        var service = CreateService();
+        var creator = await service.CreateRoomAsync("Ada", ParticipantRole.Facilitator);
+
+        var joiner = await service.JoinRoomAsync(creator.ChatId, "Grace");
+
+        Assert.Equal(ParticipantRole.User, joiner!.Role);
     }
 
     [Fact]
@@ -75,7 +88,7 @@ public class ChatServiceTests
     {
         var service = CreateService();
 
-        var result = await service.JoinRoomAsync("missing-chat", "Ada", ParticipantRole.User);
+        var result = await service.JoinRoomAsync("missing-chat", "Ada");
 
         Assert.Null(result);
     }
@@ -95,16 +108,14 @@ public class ChatServiceTests
     {
         var service = CreateService();
         var user = await service.CreateRoomAsync("Ada", ParticipantRole.User);
-        var facilitator = await service.JoinRoomAsync(user.ChatId, "Grace", ParticipantRole.Facilitator);
+        var secondParticipant = await service.JoinRoomAsync(user.ChatId, "Grace");
 
         await service.SetSelectionAsync(user.ChatId, user.ParticipantId, "5");
 
-        var stateForFacilitator = await service.GetStateAsync(user.ChatId, facilitator!.ParticipantId);
-        var seenByFacilitator = stateForFacilitator!.Participants.Single(p =>
-            p.ParticipantId == user.ParticipantId
-        );
-        Assert.True(seenByFacilitator.HasSelected);
-        Assert.Null(seenByFacilitator.Selection);
+        var stateForOther = await service.GetStateAsync(user.ChatId, secondParticipant!.ParticipantId);
+        var seenByOther = stateForOther!.Participants.Single(p => p.ParticipantId == user.ParticipantId);
+        Assert.True(seenByOther.HasSelected);
+        Assert.Null(seenByOther.Selection);
 
         var stateForSelf = await service.GetStateAsync(user.ChatId, user.ParticipantId);
         var seenBySelf = stateForSelf!.Participants.Single(p => p.ParticipantId == user.ParticipantId);
@@ -116,13 +127,13 @@ public class ChatServiceTests
     {
         var service = CreateService();
         var user = await service.CreateRoomAsync("Ada", ParticipantRole.User);
-        var facilitator = await service.JoinRoomAsync(user.ChatId, "Grace", ParticipantRole.Facilitator);
+        var secondParticipant = await service.JoinRoomAsync(user.ChatId, "Grace");
         await service.SetSelectionAsync(user.ChatId, user.ParticipantId, "8");
 
         var revealed = await service.RevealAsync(user.ChatId);
 
         Assert.True(revealed);
-        var state = await service.GetStateAsync(user.ChatId, facilitator!.ParticipantId);
+        var state = await service.GetStateAsync(user.ChatId, secondParticipant!.ParticipantId);
         Assert.True(state!.Revealed);
         Assert.Equal("8", state.Participants.Single(p => p.ParticipantId == user.ParticipantId).Selection);
     }
@@ -158,7 +169,7 @@ public class ChatServiceTests
     {
         var service = CreateService();
         var user = await service.CreateRoomAsync("Ada", ParticipantRole.User);
-        var facilitator = await service.JoinRoomAsync(user.ChatId, "Grace", ParticipantRole.Facilitator);
+        var secondParticipant = await service.JoinRoomAsync(user.ChatId, "Grace");
         await service.SetSelectionAsync(user.ChatId, user.ParticipantId, "8");
         await service.RevealAsync(user.ChatId);
 
@@ -171,6 +182,7 @@ public class ChatServiceTests
         Assert.Equal(2, state.Participants.Count);
         Assert.All(state.Participants, p => Assert.False(p.HasSelected));
         Assert.All(state.Participants, p => Assert.Null(p.Selection));
+        Assert.NotNull(secondParticipant);
     }
 
     [Fact]
@@ -221,5 +233,31 @@ public class ChatServiceTests
         var closed = await service.CloseAsync("missing-chat");
 
         Assert.False(closed);
+    }
+
+    [Fact]
+    public async Task RemoveParticipant_RemovesThemFromRoomState()
+    {
+        var service = CreateService();
+        var facilitator = await service.CreateRoomAsync("Grace", ParticipantRole.Facilitator);
+        var user = await service.JoinRoomAsync(facilitator.ChatId, "Ada");
+
+        var removed = await service.RemoveParticipantAsync(facilitator.ChatId, user!.ParticipantId);
+
+        Assert.True(removed);
+        var state = await service.GetStateAsync(facilitator.ChatId, facilitator.ParticipantId);
+        Assert.DoesNotContain(state!.Participants, p => p.ParticipantId == user.ParticipantId);
+        Assert.Single(state.Participants);
+    }
+
+    [Fact]
+    public async Task RemoveParticipant_UnknownParticipant_ReturnsFalse()
+    {
+        var service = CreateService();
+        var facilitator = await service.CreateRoomAsync("Grace", ParticipantRole.Facilitator);
+
+        var removed = await service.RemoveParticipantAsync(facilitator.ChatId, "no-such-participant");
+
+        Assert.False(removed);
     }
 }

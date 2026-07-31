@@ -41,12 +41,12 @@ function App() {
     setSession({ chatId, participantId, name, role })
   }
 
-  async function handleJoinRoom(name: string, role: ParticipantRole) {
+  async function handleJoinRoom(name: string) {
     if (!roomId) {
       return
     }
     try {
-      const { chatId, participantId } = await joinRoom(roomId, name, role)
+      const { chatId, participantId, role } = await joinRoom(roomId, name)
       setSession({ chatId, participantId, name, role })
     } catch {
       setRoomValidity('invalid')
@@ -69,7 +69,11 @@ function App() {
       ) : roomValidity === 'invalid' ? (
         <RoomStatus key="invalid" status="invalid" />
       ) : (
-        <LandingPage key="landing" onSubmit={roomId ? handleJoinRoom : handleCreateRoom} />
+        <LandingPage
+          key="landing"
+          onSubmit={roomId ? handleJoinRoom : handleCreateRoom}
+          allowRoleSelection={!roomId}
+        />
       )}
     </AnimatePresence>
   )

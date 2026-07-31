@@ -4,11 +4,12 @@ import type { ParticipantRole } from '../api'
 
 interface LandingPageProps {
   onSubmit: (name: string, role: ParticipantRole) => void
+  allowRoleSelection?: boolean
 }
 
-function LandingPage({ onSubmit }: LandingPageProps) {
+function LandingPage({ onSubmit, allowRoleSelection = true }: LandingPageProps) {
   const [name, setName] = useState('')
-  const [role, setRole] = useState<ParticipantRole>('Facilitator')
+  const [role, setRole] = useState<ParticipantRole>(allowRoleSelection ? 'Facilitator' : 'User')
   const trimmed = name.trim()
 
   function handleSubmit(event: React.FormEvent) {
@@ -41,25 +42,27 @@ function LandingPage({ onSubmit }: LandingPageProps) {
           aria-label="Your name"
           className="mb-4 w-full rounded-lg border-2 border-blue-primary/40 px-4 py-2 text-dark-navy outline-none focus:border-blue-primary"
         />
-        <fieldset className="mb-6 flex justify-center gap-6">
-          <legend className="sr-only">Role</legend>
-          {(['Facilitator', 'User'] as const).map((option) => (
-            <label
-              key={option}
-              className="flex items-center gap-2 text-sm text-dark-navy"
-            >
-              <input
-                type="radio"
-                name="role"
-                value={option}
-                checked={role === option}
-                onChange={() => setRole(option)}
-                className="accent-purple-secondary"
-              />
-              {option}
-            </label>
-          ))}
-        </fieldset>
+        {allowRoleSelection && (
+          <fieldset className="mb-6 flex justify-center gap-6">
+            <legend className="sr-only">Role</legend>
+            {(['Facilitator', 'User'] as const).map((option) => (
+              <label
+                key={option}
+                className="flex items-center gap-2 text-sm text-dark-navy"
+              >
+                <input
+                  type="radio"
+                  name="role"
+                  value={option}
+                  checked={role === option}
+                  onChange={() => setRole(option)}
+                  className="accent-purple-secondary"
+                />
+                {option}
+              </label>
+            ))}
+          </fieldset>
+        )}
         <button
           type="submit"
           disabled={!trimmed}
