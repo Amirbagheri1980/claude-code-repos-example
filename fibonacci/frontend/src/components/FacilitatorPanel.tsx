@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { revealChat, restartChat, closeChat, type ChatStateResponse } from '../api'
 
 interface FacilitatorPanelProps {
@@ -7,8 +8,16 @@ interface FacilitatorPanelProps {
 }
 
 function FacilitatorPanel({ chatId, chatState, onClose }: FacilitatorPanelProps) {
+  const [copied, setCopied] = useState(false)
   const participants = chatState?.participants ?? []
   const revealed = chatState?.revealed ?? false
+  const shareUrl = `${window.location.origin}/chat/${chatId}`
+
+  async function handleCopy() {
+    await navigator.clipboard.writeText(shareUrl)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   function handleReveal() {
     void revealChat(chatId)
@@ -25,6 +34,27 @@ function FacilitatorPanel({ chatId, chatState, onClose }: FacilitatorPanelProps)
 
   return (
     <section className="rounded-2xl bg-white/95 p-6 shadow-xl sm:p-8">
+      <div className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-blue-primary/20 bg-blue-primary/5 px-4 py-3">
+        <label className="flex-1 text-xs font-medium tracking-wide text-gray-text uppercase">
+          Room link
+          <input
+            type="text"
+            readOnly
+            value={shareUrl}
+            aria-label="Room link"
+            onFocus={(event) => event.target.select()}
+            className="mt-1 block w-full rounded-lg border border-blue-primary/30 bg-white px-3 py-2 font-mono text-sm text-dark-navy"
+          />
+        </label>
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="rounded-lg border border-blue-primary px-3 py-2 text-sm font-semibold text-blue-primary"
+        >
+          {copied ? 'Copied!' : 'Copy link'}
+        </button>
+      </div>
+
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-xl font-semibold text-dark-navy">Participants</h2>
         <div className="flex gap-3">

@@ -2,7 +2,14 @@ namespace Api.Chats;
 
 public interface IChatService
 {
-    Task<JoinResponse> JoinAsync(string name, ParticipantRole role, CancellationToken ct = default);
+    Task<JoinResponse> CreateRoomAsync(string name, ParticipantRole role, CancellationToken ct = default);
+
+    Task<JoinResponse?> JoinRoomAsync(
+        string chatId,
+        string name,
+        ParticipantRole role,
+        CancellationToken ct = default
+    );
 
     Task<ChatStateResponse?> GetStateAsync(
         string chatId,

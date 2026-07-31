@@ -2,8 +2,9 @@ import { defineConfig } from '@playwright/test'
 
 export default defineConfig({
   testDir: './e2e',
-  // The backend has a single global active chat (no rooms/join-codes), so
-  // specs can't safely run concurrently against it.
+  // Each spec now creates its own isolated room, so parallel execution would
+  // likely be safe, but keeping this serial for now is a deliberate, separate
+  // decision from the room-creation feature itself.
   fullyParallel: false,
   workers: 1,
   webServer: [

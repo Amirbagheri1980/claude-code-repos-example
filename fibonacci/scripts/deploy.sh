@@ -26,8 +26,9 @@ echo "==> Deploying frontend (Amplify Hosting)"
 FRONTEND_URL=$(node -pe "require('./infra/outputs.json').FibonacciFrontend.AppUrl")
 echo "    Frontend URL: $FRONTEND_URL"
 
-echo "==> Deploying backend (App Runner), pass 2 — locking CORS to $FRONTEND_URL"
-(cd infra && CORS_ALLOWED_ORIGIN="$FRONTEND_URL" npx cdk deploy FibonacciBackend --outputs-file outputs.json --require-approval never)
+CORS_ORIGINS="https://fibonacci.aeyeit.com.au,$FRONTEND_URL"
+echo "==> Deploying backend (App Runner), pass 2 — locking CORS to $CORS_ORIGINS"
+(cd infra && CORS_ALLOWED_ORIGIN="$CORS_ORIGINS" npx cdk deploy FibonacciBackend --outputs-file outputs.json --require-approval never)
 
 echo
 echo "Done."

@@ -1,9 +1,4 @@
 import { test, expect } from '@playwright/test'
-import { resetActiveChat } from './reset-chat'
-
-test.beforeEach(async ({ request }) => {
-  await resetActiveChat(request)
-})
 
 test('facilitator reveals a user pick and closing the chat returns the user to the landing page', async ({
   browser,
@@ -22,8 +17,12 @@ test('facilitator reveals a user pick and closing the chat returns the user to t
     await expect(
       facilitatorPage.getByRole('heading', { name: /participants/i }),
     ).toBeVisible()
+    await expect(facilitatorPage).toHaveURL(/\/chat\/[A-Z0-9]{6}$/)
 
-    await userPage.goto('/')
+    const roomLink = await facilitatorPage.getByLabel(/room link/i).inputValue()
+
+    await userPage.goto(roomLink)
+    await expect(userPage.getByLabel(/your name/i)).toBeVisible()
     await userPage.getByRole('radio', { name: 'User' }).check()
     await userPage.getByLabel(/your name/i).fill('Ada Lovelace')
     await userPage.getByRole('button', { name: /enter/i }).click()

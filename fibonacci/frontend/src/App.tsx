@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import LandingPage from './components/LandingPage'
 import MainPage from './components/MainPage'
-import { joinChat, type ParticipantRole } from './api'
+import RoomStatus from './components/RoomStatus'
+import { createRoom, joinRoom, getChatState, type ParticipantRole } from './api'
+import { getRoomIdFromUrl, navigateToRoom, navigateToRoot } from './routing'
 
 export interface Session {
   chatId: string
@@ -13,22 +15,61 @@ export interface Session {
 
 function App() {
   const [session, setSession] = useState<Session | null>(null)
+  const [roomId, setRoomId] = useState<string | null>(() => getRoomIdFromUrl())
+  const [roomValidity, setRoomValidity] = useState<'checking' | 'valid' | 'invalid'>(() =>
+    roomId ? 'checking' : 'valid',
+  )
 
-  async function handleJoin(name: string, role: ParticipantRole) {
-    const { chatId, participantId } = await joinChat(name, role)
+  useEffect(() => {
+    if (!roomId) {
+      return
+    }
+    let cancelled = false
+    getChatState(roomId).then((state) => {
+      if (!cancelled) {
+        setRoomValidity(state ? 'valid' : 'invalid')
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [roomId])
+
+  async function handleCreateRoom(name: string, role: ParticipantRole) {
+    const { chatId, participantId } = await createRoom(name, role)
+    navigateToRoom(chatId)
     setSession({ chatId, participantId, name, role })
+  }
+
+  async function handleJoinRoom(name: string, role: ParticipantRole) {
+    if (!roomId) {
+      return
+    }
+    try {
+      const { chatId, participantId } = await joinRoom(roomId, name, role)
+      setSession({ chatId, participantId, name, role })
+    } catch {
+      setRoomValidity('invalid')
+    }
   }
 
   function handleLeave() {
     setSession(null)
+    navigateToRoot()
+    setRoomId(null)
+    setRoomValidity('valid')
   }
 
   return (
     <AnimatePresence mode="wait">
       {session ? (
         <MainPage key="main" session={session} onLeave={handleLeave} />
+      ) : roomValidity === 'checking' ? (
+        <RoomStatus key="checking" status="checking" />
+      ) : roomValidity === 'invalid' ? (
+        <RoomStatus key="invalid" status="invalid" />
       ) : (
-        <LandingPage key="landing" onSubmit={handleJoin} />
+        <LandingPage key="landing" onSubmit={roomId ? handleJoinRoom : handleCreateRoom} />
       )}
     </AnimatePresence>
   )

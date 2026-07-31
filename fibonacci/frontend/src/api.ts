@@ -36,8 +36,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T
 }
 
-export function joinChat(name: string, role: ParticipantRole): Promise<JoinResponse> {
-  return request<JoinResponse>('/api/chats/join', {
+export function createRoom(name: string, role: ParticipantRole): Promise<JoinResponse> {
+  return request<JoinResponse>('/api/chats', {
+    method: 'POST',
+    body: JSON.stringify({ name, role }),
+  })
+}
+
+export function joinRoom(
+  chatId: string,
+  name: string,
+  role: ParticipantRole,
+): Promise<JoinResponse> {
+  return request<JoinResponse>(`/api/chats/${chatId}/join`, {
     method: 'POST',
     body: JSON.stringify({ name, role }),
   })
@@ -45,11 +56,10 @@ export function joinChat(name: string, role: ParticipantRole): Promise<JoinRespo
 
 export async function getChatState(
   chatId: string,
-  participantId: string,
+  participantId?: string,
 ): Promise<ChatStateResponse | null> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/chats/${chatId}?participantId=${participantId}`,
-  )
+  const query = participantId ? `?participantId=${participantId}` : ''
+  const response = await fetch(`${API_BASE_URL}/api/chats/${chatId}${query}`)
   if (response.status === 404) {
     return null
   }

@@ -5,28 +5,79 @@ namespace Api.Tests;
 
 public class ChatServiceTests
 {
-    private static ChatService CreateService() => new(InMemoryDynamoDb.Create(), "TestChats");
+    private static ChatService CreateService(Func<string>? roomCodeGenerator = null) =>
+        new(InMemoryDynamoDb.Create(), "TestChats", roomCodeGenerator);
 
     [Fact]
-    public async Task Join_FirstParticipant_CreatesNewChat()
+    public async Task CreateRoom_CreatesNewChatWithFirstParticipant()
     {
         var service = CreateService();
 
-        var response = await service.JoinAsync("Ada", ParticipantRole.User);
+        var response = await service.CreateRoomAsync("Ada", ParticipantRole.User);
 
         Assert.NotEmpty(response.ChatId);
         Assert.NotEmpty(response.ParticipantId);
     }
 
     [Fact]
-    public async Task Join_SecondParticipant_JoinsSameActiveChat()
+    public async Task CreateRoom_GeneratesShortUnambiguousAlphanumericCode()
     {
         var service = CreateService();
 
-        var first = await service.JoinAsync("Ada", ParticipantRole.User);
-        var second = await service.JoinAsync("Grace", ParticipantRole.Facilitator);
+        var response = await service.CreateRoomAsync("Ada", ParticipantRole.User);
 
-        Assert.Equal(first.ChatId, second.ChatId);
+        Assert.Matches("^[A-HJ-KM-NP-Z2-9]{6}$", response.ChatId);
+    }
+
+    [Fact]
+    public async Task CreateRoom_RetriesWhenGeneratedCodeCollides()
+    {
+        var db = InMemoryDynamoDb.Create();
+        var occupant = new ChatService(db, "TestChats", () => "AAAAAA");
+        await occupant.CreateRoomAsync("Existing", ParticipantRole.Facilitator);
+
+        var codes = new Queue<string>(new[] { "AAAAAA", "BBBBBB" });
+        var service = new ChatService(db, "TestChats", () => codes.Dequeue());
+
+        var result = await service.CreateRoomAsync("Ada", ParticipantRole.User);
+
+        Assert.Equal("BBBBBB", result.ChatId);
+    }
+
+    [Fact]
+    public async Task CreateRoom_ExhaustsAttempts_ThrowsInvalidOperationException()
+    {
+        var db = InMemoryDynamoDb.Create();
+        var occupant = new ChatService(db, "TestChats", () => "AAAAAA");
+        await occupant.CreateRoomAsync("Existing", ParticipantRole.Facilitator);
+
+        var service = new ChatService(db, "TestChats", () => "AAAAAA");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.CreateRoomAsync("Ada", ParticipantRole.User)
+        );
+    }
+
+    [Fact]
+    public async Task JoinRoom_AddsParticipantToExistingRoom()
+    {
+        var service = CreateService();
+        var first = await service.CreateRoomAsync("Ada", ParticipantRole.User);
+
+        var second = await service.JoinRoomAsync(first.ChatId, "Grace", ParticipantRole.Facilitator);
+
+        Assert.NotNull(second);
+        Assert.Equal(first.ChatId, second!.ChatId);
+    }
+
+    [Fact]
+    public async Task JoinRoom_UnknownChatId_ReturnsNull()
+    {
+        var service = CreateService();
+
+        var result = await service.JoinRoomAsync("missing-chat", "Ada", ParticipantRole.User);
+
+        Assert.Null(result);
     }
 
     [Fact]
@@ -43,12 +94,12 @@ public class ChatServiceTests
     public async Task Selection_IsHiddenFromOthers_UntilRevealed()
     {
         var service = CreateService();
-        var user = await service.JoinAsync("Ada", ParticipantRole.User);
-        var facilitator = await service.JoinAsync("Grace", ParticipantRole.Facilitator);
+        var user = await service.CreateRoomAsync("Ada", ParticipantRole.User);
+        var facilitator = await service.JoinRoomAsync(user.ChatId, "Grace", ParticipantRole.Facilitator);
 
         await service.SetSelectionAsync(user.ChatId, user.ParticipantId, "5");
 
-        var stateForFacilitator = await service.GetStateAsync(user.ChatId, facilitator.ParticipantId);
+        var stateForFacilitator = await service.GetStateAsync(user.ChatId, facilitator!.ParticipantId);
         var seenByFacilitator = stateForFacilitator!.Participants.Single(p =>
             p.ParticipantId == user.ParticipantId
         );
@@ -64,14 +115,14 @@ public class ChatServiceTests
     public async Task Reveal_MakesSelectionsVisibleToEveryone()
     {
         var service = CreateService();
-        var user = await service.JoinAsync("Ada", ParticipantRole.User);
-        var facilitator = await service.JoinAsync("Grace", ParticipantRole.Facilitator);
+        var user = await service.CreateRoomAsync("Ada", ParticipantRole.User);
+        var facilitator = await service.JoinRoomAsync(user.ChatId, "Grace", ParticipantRole.Facilitator);
         await service.SetSelectionAsync(user.ChatId, user.ParticipantId, "8");
 
         var revealed = await service.RevealAsync(user.ChatId);
 
         Assert.True(revealed);
-        var state = await service.GetStateAsync(user.ChatId, facilitator.ParticipantId);
+        var state = await service.GetStateAsync(user.ChatId, facilitator!.ParticipantId);
         Assert.True(state!.Revealed);
         Assert.Equal("8", state.Participants.Single(p => p.ParticipantId == user.ParticipantId).Selection);
     }
@@ -80,7 +131,7 @@ public class ChatServiceTests
     public async Task Selection_ToggleToNull_ClearsIt()
     {
         var service = CreateService();
-        var user = await service.JoinAsync("Ada", ParticipantRole.User);
+        var user = await service.CreateRoomAsync("Ada", ParticipantRole.User);
 
         await service.SetSelectionAsync(user.ChatId, user.ParticipantId, "5");
         await service.SetSelectionAsync(user.ChatId, user.ParticipantId, null);
@@ -95,7 +146,7 @@ public class ChatServiceTests
     public async Task SetSelection_UnknownParticipant_ReturnsFalse()
     {
         var service = CreateService();
-        var user = await service.JoinAsync("Ada", ParticipantRole.User);
+        var user = await service.CreateRoomAsync("Ada", ParticipantRole.User);
 
         var ok = await service.SetSelectionAsync(user.ChatId, "no-such-participant", "5");
 
@@ -106,8 +157,8 @@ public class ChatServiceTests
     public async Task Restart_ClearsSelectionsAndReveal_ButKeepsParticipants()
     {
         var service = CreateService();
-        var user = await service.JoinAsync("Ada", ParticipantRole.User);
-        var facilitator = await service.JoinAsync("Grace", ParticipantRole.Facilitator);
+        var user = await service.CreateRoomAsync("Ada", ParticipantRole.User);
+        var facilitator = await service.JoinRoomAsync(user.ChatId, "Grace", ParticipantRole.Facilitator);
         await service.SetSelectionAsync(user.ChatId, user.ParticipantId, "8");
         await service.RevealAsync(user.ChatId);
 
@@ -126,7 +177,7 @@ public class ChatServiceTests
     public async Task Restart_IncrementsRoundId()
     {
         var service = CreateService();
-        var user = await service.JoinAsync("Ada", ParticipantRole.User);
+        var user = await service.CreateRoomAsync("Ada", ParticipantRole.User);
         var before = await service.GetStateAsync(user.ChatId, user.ParticipantId);
 
         await service.RestartAsync(user.ChatId);
@@ -146,10 +197,11 @@ public class ChatServiceTests
     }
 
     [Fact]
-    public async Task Close_DeletesAllChatData_AndNextJoinStartsAFreshChat()
+    public async Task Close_DeletesAllChatData_AndFreesRoomCodeForReuse()
     {
-        var service = CreateService();
-        var first = await service.JoinAsync("Ada", ParticipantRole.User);
+        var db = InMemoryDynamoDb.Create();
+        var service = new ChatService(db, "TestChats", () => "AAAAAA");
+        var first = await service.CreateRoomAsync("Ada", ParticipantRole.User);
         await service.SetSelectionAsync(first.ChatId, first.ParticipantId, "13");
 
         var closed = await service.CloseAsync(first.ChatId);
@@ -157,8 +209,8 @@ public class ChatServiceTests
         Assert.True(closed);
         Assert.Null(await service.GetStateAsync(first.ChatId, null));
 
-        var next = await service.JoinAsync("Grace", ParticipantRole.Facilitator);
-        Assert.NotEqual(first.ChatId, next.ChatId);
+        var next = await service.CreateRoomAsync("Grace", ParticipantRole.Facilitator);
+        Assert.Equal("AAAAAA", next.ChatId);
     }
 
     [Fact]

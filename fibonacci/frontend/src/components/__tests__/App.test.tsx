@@ -1,20 +1,25 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import App from '../../App'
-import { joinChat, getChatState } from '../../api'
+import { createRoom, joinRoom, getChatState } from '../../api'
 
 vi.mock('../../api', () => ({
-  joinChat: vi.fn(),
+  createRoom: vi.fn(),
+  joinRoom: vi.fn(),
   getChatState: vi.fn(),
   setSelection: vi.fn().mockResolvedValue(undefined),
   revealChat: vi.fn().mockResolvedValue(undefined),
   closeChat: vi.fn().mockResolvedValue(undefined),
 }))
 
+afterEach(() => {
+  window.history.pushState(null, '', '/')
+})
+
 describe('App', () => {
-  it('transitions from the landing page to the main page on submit', async () => {
-    vi.mocked(joinChat).mockResolvedValue({
+  it('creates a new room and transitions to the main page when there is no room in the URL', async () => {
+    vi.mocked(createRoom).mockResolvedValue({
       chatId: 'chat-1',
       participantId: 'p1',
       role: 'User',
@@ -36,6 +41,39 @@ describe('App', () => {
       await screen.findByRole('heading', { name: /estimate deck/i }),
     ).toBeInTheDocument()
     expect(screen.getByText('Ada Lovelace')).toBeInTheDocument()
-    expect(joinChat).toHaveBeenCalledWith('Ada Lovelace', 'User')
+    expect(createRoom).toHaveBeenCalledWith('Ada Lovelace', 'User')
+    expect(window.location.pathname).toBe('/chat/chat-1')
+  })
+
+  it('shows the join form for a valid room found via the URL, and joins it', async () => {
+    window.history.pushState(null, '', '/chat/ABC234')
+    vi.mocked(getChatState).mockResolvedValue({ revealed: false, participants: [] })
+    vi.mocked(joinRoom).mockResolvedValue({
+      chatId: 'ABC234',
+      participantId: 'p2',
+      role: 'Facilitator',
+    })
+
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.type(await screen.findByLabelText(/your name/i), 'Grace Hopper')
+    await user.click(screen.getByRole('button', { name: /enter/i }))
+
+    expect(
+      await screen.findByRole('heading', { name: /participants/i }),
+    ).toBeInTheDocument()
+    expect(joinRoom).toHaveBeenCalledWith('ABC234', 'Grace Hopper', 'Facilitator')
+  })
+
+  it('shows a friendly error for an invalid/expired room in the URL', async () => {
+    window.history.pushState(null, '', '/chat/NOPE99')
+    vi.mocked(getChatState).mockResolvedValue(null)
+
+    render(<App />)
+
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: /room not found/i })).toBeInTheDocument(),
+    )
   })
 })

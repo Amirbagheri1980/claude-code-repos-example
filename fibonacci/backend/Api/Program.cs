@@ -29,7 +29,7 @@ app.MapGet("/health", () => Results.Ok());
 var chats = app.MapGroup("/api/chats");
 
 chats.MapPost(
-    "/join",
+    "",
     async (JoinRequest request, IChatService chatService, CancellationToken ct) =>
     {
         var name = request.Name.Trim();
@@ -38,8 +38,23 @@ chats.MapPost(
             return Results.BadRequest("Name is required.");
         }
 
-        var result = await chatService.JoinAsync(name, request.Role, ct);
+        var result = await chatService.CreateRoomAsync(name, request.Role, ct);
         return Results.Ok(result);
+    }
+);
+
+chats.MapPost(
+    "/{chatId}/join",
+    async (string chatId, JoinRequest request, IChatService chatService, CancellationToken ct) =>
+    {
+        var name = request.Name.Trim();
+        if (name.Length == 0)
+        {
+            return Results.BadRequest("Name is required.");
+        }
+
+        var result = await chatService.JoinRoomAsync(chatId, name, request.Role, ct);
+        return result is null ? Results.NotFound() : Results.Ok(result);
     }
 );
 

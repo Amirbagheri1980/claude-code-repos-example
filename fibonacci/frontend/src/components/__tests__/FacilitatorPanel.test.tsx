@@ -96,4 +96,25 @@ describe('FacilitatorPanel', () => {
     expect(closeChat).toHaveBeenCalledWith(CHAT_ID)
     expect(onClose).toHaveBeenCalled()
   })
+
+  it('shows a copyable shareable room link', () => {
+    render(<FacilitatorPanel chatId={CHAT_ID} chatState={chatState} onClose={vi.fn()} />)
+
+    const input = screen.getByLabelText(/room link/i) as HTMLInputElement
+    expect(input.value).toContain(`/chat/${CHAT_ID}`)
+  })
+
+  it('copies the room link to the clipboard when Copy link is clicked', async () => {
+    const user = userEvent.setup()
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    })
+    render(<FacilitatorPanel chatId={CHAT_ID} chatState={chatState} onClose={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: /copy link/i }))
+
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining(`/chat/${CHAT_ID}`))
+  })
 })

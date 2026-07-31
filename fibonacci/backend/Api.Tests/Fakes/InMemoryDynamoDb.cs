@@ -33,7 +33,12 @@ public static class InMemoryDynamoDb
             .Returns(callInfo =>
             {
                 var request = callInfo.Arg<PutItemRequest>()!;
-                table[KeyOf(request.Item)] = new Dictionary<string, AttributeValue>(request.Item);
+                var key = KeyOf(request.Item);
+                if (request.ConditionExpression == "attribute_not_exists(ChatId)" && table.ContainsKey(key))
+                {
+                    throw new ConditionalCheckFailedException("Conditional check failed.");
+                }
+                table[key] = new Dictionary<string, AttributeValue>(request.Item);
                 return Task.FromResult(new PutItemResponse());
             });
 

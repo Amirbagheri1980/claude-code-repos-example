@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.Model;
 
@@ -5,28 +6,117 @@ namespace Api.Chats;
 
 public class ChatService : IChatService
 {
-    private const string ActivePointerChatId = "ACTIVE";
-    private const string PointerSortKey = "POINTER";
     private const string MetaSortKey = "META";
     private const string ParticipantSortKeyPrefix = "PARTICIPANT#";
+    private const string RoomCodeAlphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+    private const int RoomCodeLength = 6;
+    private const int MaxCreateRoomAttempts = 5;
+    private static readonly TimeSpan RoomTtl = TimeSpan.FromHours(24);
 
     private readonly IAmazonDynamoDB _dynamoDb;
     private readonly string _tableName;
+    private readonly Func<string> _roomCodeGenerator;
 
-    public ChatService(IAmazonDynamoDB dynamoDb, string tableName)
+    public ChatService(IAmazonDynamoDB dynamoDb, string tableName, Func<string>? roomCodeGenerator = null)
     {
         _dynamoDb = dynamoDb;
         _tableName = tableName;
+        _roomCodeGenerator = roomCodeGenerator
+            ?? (() => RandomNumberGenerator.GetString(RoomCodeAlphabet, RoomCodeLength));
     }
 
-    public async Task<JoinResponse> JoinAsync(
+    public async Task<JoinResponse> CreateRoomAsync(
         string name,
         ParticipantRole role,
         CancellationToken ct = default
     )
     {
-        var chatId = await GetOrCreateActiveChatIdAsync(ct);
+        for (var attempt = 1; attempt <= MaxCreateRoomAttempts; attempt++)
+        {
+            var chatId = _roomCodeGenerator();
+            var expiresAt = DateTimeOffset.UtcNow.Add(RoomTtl);
 
+            if (await TryCreateRoomMetaAsync(chatId, expiresAt, ct))
+            {
+                return await AddParticipantAsync(chatId, name, role, expiresAt, ct);
+            }
+        }
+
+        throw new InvalidOperationException(
+            $"Could not generate a unique room code after {MaxCreateRoomAttempts} attempts."
+        );
+    }
+
+    public async Task<JoinResponse?> JoinRoomAsync(
+        string chatId,
+        string name,
+        ParticipantRole role,
+        CancellationToken ct = default
+    )
+    {
+        var metaKey = new Dictionary<string, AttributeValue>
+        {
+            ["ChatId"] = new(chatId),
+            ["SortKey"] = new(MetaSortKey),
+        };
+
+        var meta = await _dynamoDb.GetItemAsync(
+            new GetItemRequest { TableName = _tableName, Key = metaKey },
+            ct
+        );
+        if (meta.Item is not { Count: > 0 })
+        {
+            return null;
+        }
+
+        var expiresAt = meta.Item.TryGetValue("ExpiresAt", out var expiresValue)
+            ? DateTimeOffset.FromUnixTimeSeconds(long.Parse(expiresValue.N))
+            : DateTimeOffset.UtcNow.Add(RoomTtl);
+
+        return await AddParticipantAsync(chatId, name, role, expiresAt, ct);
+    }
+
+    private async Task<bool> TryCreateRoomMetaAsync(
+        string chatId,
+        DateTimeOffset expiresAt,
+        CancellationToken ct
+    )
+    {
+        try
+        {
+            await _dynamoDb.PutItemAsync(
+                new PutItemRequest
+                {
+                    TableName = _tableName,
+                    Item = new Dictionary<string, AttributeValue>
+                    {
+                        ["ChatId"] = new(chatId),
+                        ["SortKey"] = new(MetaSortKey),
+                        ["Revealed"] = new() { BOOL = false },
+                        ["RoundId"] = new() { N = "0" },
+                        ["CreatedAt"] = new(DateTimeOffset.UtcNow.ToString("O")),
+                        ["ExpiresAt"] = new() { N = expiresAt.ToUnixTimeSeconds().ToString() },
+                    },
+                    ConditionExpression = "attribute_not_exists(ChatId)",
+                },
+                ct
+            );
+            return true;
+        }
+        catch (ConditionalCheckFailedException)
+        {
+            return false;
+        }
+    }
+
+    private async Task<JoinResponse> AddParticipantAsync(
+        string chatId,
+        string name,
+        ParticipantRole role,
+        DateTimeOffset expiresAt,
+        CancellationToken ct
+    )
+    {
         var participantId = Guid.NewGuid().ToString("N");
         await _dynamoDb.PutItemAsync(
             new PutItemRequest
@@ -40,6 +130,7 @@ public class ChatService : IChatService
                     ["Name"] = new(name),
                     ["Role"] = new(role.ToString()),
                     ["JoinedAt"] = new(DateTimeOffset.UtcNow.ToString("O")),
+                    ["ExpiresAt"] = new() { N = expiresAt.ToUnixTimeSeconds().ToString() },
                 },
             },
             ct
@@ -266,19 +357,6 @@ public class ChatService : IChatService
             ))
             .ToList();
 
-        deleteRequests.Add(
-            new WriteRequest(
-                new DeleteRequest
-                {
-                    Key = new Dictionary<string, AttributeValue>
-                    {
-                        ["ChatId"] = new(ActivePointerChatId),
-                        ["SortKey"] = new(PointerSortKey),
-                    },
-                }
-            )
-        );
-
         foreach (var batch in deleteRequests.Chunk(25))
         {
             await _dynamoDb.BatchWriteItemAsync(
@@ -291,58 +369,6 @@ public class ChatService : IChatService
         }
 
         return true;
-    }
-
-    private async Task<string> GetOrCreateActiveChatIdAsync(CancellationToken ct)
-    {
-        var pointerKey = new Dictionary<string, AttributeValue>
-        {
-            ["ChatId"] = new(ActivePointerChatId),
-            ["SortKey"] = new(PointerSortKey),
-        };
-
-        var pointer = await _dynamoDb.GetItemAsync(
-            new GetItemRequest { TableName = _tableName, Key = pointerKey },
-            ct
-        );
-        if (pointer.Item is { Count: > 0 })
-        {
-            return pointer.Item["CurrentChatId"].S;
-        }
-
-        var chatId = Guid.NewGuid().ToString("N");
-
-        await _dynamoDb.PutItemAsync(
-            new PutItemRequest
-            {
-                TableName = _tableName,
-                Item = new Dictionary<string, AttributeValue>
-                {
-                    ["ChatId"] = new(ActivePointerChatId),
-                    ["SortKey"] = new(PointerSortKey),
-                    ["CurrentChatId"] = new(chatId),
-                },
-            },
-            ct
-        );
-
-        await _dynamoDb.PutItemAsync(
-            new PutItemRequest
-            {
-                TableName = _tableName,
-                Item = new Dictionary<string, AttributeValue>
-                {
-                    ["ChatId"] = new(chatId),
-                    ["SortKey"] = new(MetaSortKey),
-                    ["Revealed"] = new() { BOOL = false },
-                    ["RoundId"] = new() { N = "0" },
-                    ["CreatedAt"] = new(DateTimeOffset.UtcNow.ToString("O")),
-                },
-            },
-            ct
-        );
-
-        return chatId;
     }
 
     private async Task<List<Dictionary<string, AttributeValue>>> QueryChatItemsAsync(

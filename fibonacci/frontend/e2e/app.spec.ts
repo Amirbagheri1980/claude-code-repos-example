@@ -1,9 +1,4 @@
 import { test, expect } from '@playwright/test'
-import { resetActiveChat } from './reset-chat'
-
-test.beforeEach(async ({ request }) => {
-  await resetActiveChat(request)
-})
 
 test('full estimation flow: join, view sidebar, select and switch cards', async ({
   page,
