@@ -18,7 +18,12 @@ export class FrontendStack extends Stack {
     // (the repo isn't connected to a git provider), via Amplify's startDeployment API.
     const asset = new s3assets.Asset(this, 'FrontendBuild', { path: distDir });
 
-    const app = new amplify.App(this, 'App', { appName: 'fibonacci-frontend' });
+    const app = new amplify.App(this, 'App', {
+      appName: 'fibonacci-frontend',
+      // Client-side routes like /chat/{roomId} have no matching S3 object,
+      // so direct/deep-link requests 404 without this SPA fallback rewrite.
+      customRules: [amplify.CustomRule.SINGLE_PAGE_APPLICATION_REDIRECT],
+    });
     const branch = app.addBranch('main', { asset, autoBuild: false });
 
     new CfnOutput(this, 'AppUrl', { value: `https://main.${app.defaultDomain}` });
